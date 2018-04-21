@@ -37,6 +37,52 @@ function KevoAccessory(log, config) {
   this._setup();
 }
 
+KevoAccessory.prototype.multirequest = function(uri, options, callback, count) {
+    if (!count) {
+	count = 0;
+    }
+
+    var platform = this;
+    if (typeof options === 'function') {
+	callback = options;
+	options = {};
+    }
+
+    return request(uri, options, function (err, response, body) {
+	    if (response.statusCode == 500 && count < 5) {
+		platform.log('Got a 500 response trying again');
+		return platform.multirequest(uri, options, callback, ++count);
+	    } else {
+		if(callback) {
+		    return callback(err, response, body);
+		}
+	    }
+	});
+}
+
+KevoAccessory.prototype.multipost = function(uri, options, callback, count) {
+    if (!count) {
+	count = 0;
+    }
+
+    var platform = this;
+    if (typeof options === 'function') {
+	callback = options;
+	options = {};
+    }
+
+    return request.post(uri, options, function (err, response, body) {
+	    if (response.statusCode == 500 && count < 5) {
+		platform.log('Got a 500 response trying again');
+		return platform.multipost(uri, options, callback, ++count);
+	    } else {
+		if(callback) {
+		    return callback(err, response, body);
+		}
+	    }
+	});
+}
+
 KevoAccessory.prototype._setup = function() {
   this._login(function(err) {
     if (err) {
@@ -62,7 +108,7 @@ KevoAccessory.prototype._login = function(callback) {
     return true; // ok redirect, sure
   }.bind(this);
 
-  request(url, {followRedirect:followRedirect}, function (err, response, body) {
+  this.multirequest(url, {followRedirect:followRedirect}, function (err, response, body) {
     if (response.statusCode == 302) return; // we cancelled a redirect above
     
     if (!err && response.statusCode == 200 && response.headers['content-type'].indexOf("text/html") == 0) {
@@ -91,7 +137,7 @@ KevoAccessory.prototype._login = function(callback) {
       }
       
       // Submit the login page
-      request.post(action, {form:form}, function(err, response, body) {
+      this.multipost(action, {form:form}, function(err, response, body) {
         // we expect a redirect response
         if (!err && response.statusCode == 302) {
           this.log("Login successful.");
@@ -116,7 +162,7 @@ KevoAccessory.prototype._login = function(callback) {
 KevoAccessory.prototype._checkLockExists = function(callback) {
   var url = "https://www.mykevo.com/user/locks";
   
-  request(url, function(err, response, body) {
+  this.multirequest(url, function(err, response, body) {
     if (!err && response.statusCode == 200) {
       var $ = cheerio.load(body);
       var seenLockIds = [];
@@ -156,7 +202,7 @@ KevoAccessory.prototype._getLockStatus = function(callback) {
   var qs = {
     arguments: this.lockId
   };
-  request(url, {qs:qs}, function(err, response, body) {
+  this.multirequest(url, {qs:qs}, function(err, response, body) {
 
     if (!err && response.statusCode == 200) {
       var json = JSON.parse(body);
@@ -191,7 +237,7 @@ KevoAccessory.prototype._setLockStatus = function(status, callback) {
     arguments: this.lockId
   };
   
-  request(url, {qs:qs}, function(err, response, body) {
+  this.multirequest(url, {qs:qs}, function(err, response, body) {
 
     if (!err && response.statusCode == 200) {
       var json = JSON.parse(body);
